@@ -3,6 +3,7 @@
 #include <iostream>
 #include <condition_variable>
 #include <atomic>
+#include <chrono>
 
 class ThreadBarrier
 {
@@ -27,6 +28,25 @@ public:
         else
         {
             Cv.wait(lk);
+            WaitingAmount.fetch_sub(1);
+        }
+    }
+
+    // If the time runs out, the function returns control to the thread that called it
+    void WaitFor(int amount, std::chrono::seconds time)
+    {
+        std::mutex sleepMtx;
+        std::unique_lock<std::mutex> lk(sleepMtx);
+
+        WaitingAmount.fetch_add(1);
+
+        if (WaitingAmount.compare_exchange_strong(amount, amount - 1))
+        {
+            while (WaitingAmount.load() != 0) Cv.notify_all();
+        }
+        else
+        {
+            Cv.wait_for(lk, time);
             WaitingAmount.fetch_sub(1);
         }
     }
@@ -68,4 +88,8 @@ int main()
 
     th1.join();
     th2.join();
+
+    std::cout << "WaitFor test in 2 secs started" << std::endl;
+    barr.WaitFor(2, std::chrono::seconds(2));
+    std::cout << "WaitFor test in 2 secs ended" << std::endl;
 }
