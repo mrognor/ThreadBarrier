@@ -8,7 +8,6 @@
 class ThreadBarrier
 {
 private:
-    std::mutex Mtx;
     std::condition_variable Cv;
     std::atomic_int WaitingAmount;
 public:
