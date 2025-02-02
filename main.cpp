@@ -1,15 +1,19 @@
+#include <fstream>
+#include <cstdint>
+#include <iostream>
 #include <thread>
 #include <mutex>
-#include <iostream>
 #include <condition_variable>
 #include <atomic>
-#include <chrono>
+
+#include <Windows.h>
 
 class ThreadBarrier
 {
 private:
     std::condition_variable Cv;
     std::atomic_int WaitingAmount;
+    std::atomic_bool IsEnded = false;
 public:
     ThreadBarrier() { WaitingAmount.store(0); }
 
@@ -18,77 +22,50 @@ public:
         std::mutex sleepMtx;
         std::unique_lock lk(sleepMtx);
 
-        WaitingAmount.fetch_add(1);
-
-        if (WaitingAmount.compare_exchange_strong(amount, amount - 1))
-        {
-            while (WaitingAmount.load() != 0) Cv.notify_all();
-        }
-        else
-        {
-            Cv.wait(lk);
-            WaitingAmount.fetch_sub(1);
-        }
-    }
-
-    // If the time runs out, the function returns control to the thread that called it
-    void WaitFor(int amount, std::chrono::seconds time)
-    {
-        std::mutex sleepMtx;
-        std::unique_lock<std::mutex> lk(sleepMtx);
+        // std::cout << std::this_thread::get_id() << std::endl;
 
         WaitingAmount.fetch_add(1);
 
         if (WaitingAmount.compare_exchange_strong(amount, amount - 1))
         {
+            IsEnded = false;
             while (WaitingAmount.load() != 0) Cv.notify_all();
+            WaitingAmount.store(0);
+            IsEnded = true;
         }
         else
         {
-            Cv.wait_for(lk, time);
+            Cv.wait(lk); // Handle spurious wake up
             WaitingAmount.fetch_sub(1);
+
+            while (!IsEnded) {}
         }
     }
 };
 
-#include <Windows.h>
-
 int main()
 {
-    ThreadBarrier barr;
+    ThreadBarrier barrier;
+    std::atomic_int64_t counter(0);
 
-    std::thread th1([&barr]()
+    std::thread th1([&]()
+    {
+        for (std::size_t i = 0; i < 1000000; ++i)
         {
-            std::cout << "Entered th1" << std::endl;
-            barr.Wait(2);
-            std::cout << "Start th1" << std::endl;
+            counter.fetch_add(1);
+            barrier.Wait(2);
+        }
 
-            Sleep(2000);
+        std::cout << "Th: " << counter << std::endl;
+    });
 
-            std::cout << "Start step 1 th1" << std::endl;
-            barr.Wait(2);
-            std::cout << "Stop step 1 th1" << std::endl;
-        });
-    
-    Sleep(1000);
-
-    std::thread th2([&barr]()
-        {
-            std::cout << "Entered th2" << std::endl;
-            barr.Wait(2);
-            std::cout << "Start th2" << std::endl;
-
-            Sleep(3000);
-
-            std::cout << "Start step 1 th2" << std::endl;
-            barr.Wait(2);
-            std::cout << "Stop step 1 th2" << std::endl;
-        });
+    for (std::size_t i = 0; i < 1000000; ++i)
+    {
+        counter.fetch_sub(1);
+        // Sleep(100);
+        barrier.Wait(2);
+    }
+    std::cout << "Main: " << counter << std::endl;
 
     th1.join();
-    th2.join();
-
-    std::cout << "WaitFor test in 2 secs started" << std::endl;
-    barr.WaitFor(2, std::chrono::seconds(2));
-    std::cout << "WaitFor test in 2 secs ended" << std::endl;
 }
