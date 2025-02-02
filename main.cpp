@@ -37,7 +37,7 @@ public:
         }
         else
         {
-            Cv.wait(lk, [this]() {return IsEnded.load() == false; });
+            Cv.wait(lk, [this]() { return IsEnded.load() == false; });
             WaitingAmount.fetch_sub(1);
 
             while (!IsEnded.load()) {}
