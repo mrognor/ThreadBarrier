@@ -6,8 +6,6 @@
 #include <condition_variable>
 #include <atomic>
 
-#include <Windows.h>
-
 class ThreadBarrier
 {
 private:
@@ -24,7 +22,7 @@ public:
     void Wait(int amount)
     {
         std::mutex mtx;
-        std::unique_lock lk(mtx);
+        std::unique_lock<std::mutex> lk(mtx);
 
         WaitingAmount.fetch_add(1);
 
