@@ -30,7 +30,6 @@ public:
         {
             IsEnded.store(false);
             while (WaitingAmount.load() != 0) Cv.notify_all();
-            WaitingAmount.store(0);
             IsEnded.store(true);
         }
         else
